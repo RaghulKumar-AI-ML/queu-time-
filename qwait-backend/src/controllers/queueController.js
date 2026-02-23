@@ -1,9 +1,57 @@
 const Queue = require('../models/Queue');
 const Store = require('../models/Store');
 
-// @desc    Join queue
-// @route   POST /api/queues/join
-// @access  Private (Customer)
+// 🔄 HELPER FUNCTION: Recalculate wait times when someone leaves
+async function recalculateWaitTimes(storeId, io) {
+  try {
+    const store = await Store.findById(storeId);
+    
+    // Get all waiting people, sorted by who joined first
+    const waitingQueues = await Queue.find({
+      store: storeId,
+      status: 'waiting'
+    }).sort('joinedAt');
+
+    // Update wait time for each person
+    for (let i = 0; i < waitingQueues.length; i++) {
+      const peopleAhead = i; // Position in queue (0 = first, 1 = second, etc.)
+      const newWaitTime = peopleAhead * store.avgServiceTime;
+      
+      // Only update if wait time changed
+      if (waitingQueues[i].estimatedWaitTime !== newWaitTime) {
+        waitingQueues[i].estimatedWaitTime = newWaitTime;
+        await waitingQueues[i].save();
+        
+        // 📡 Send real-time update to this person
+        if (io) {
+          io.to(`queue-${waitingQueues[i]._id}`).emit('waitTimeUpdate', {
+            queueId: waitingQueues[i]._id,
+            estimatedWaitTime: newWaitTime,
+            positionInQueue: i + 1,
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+    }
+
+    // 📡 Send update to everyone watching this store
+    if (io) {
+      io.to(`store-${storeId}`).emit('queueUpdate', {
+        storeId,
+        currentQueueSize: store.currentQueueSize,
+        waitingCount: waitingQueues.length,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    return waitingQueues.length;
+  } catch (error) {
+    console.error('Error recalculating wait times:', error);
+    throw error;
+  }
+}
+
+// ✅ JOIN QUEUE
 exports.joinQueue = async (req, res) => {
   try {
     const { storeId, serviceType, priority, notes } = req.body;
@@ -33,7 +81,7 @@ exports.joinQueue = async (req, res) => {
       });
     }
 
-    // Check if customer already in queue for this store
+    // Check if customer already in queue
     const existingQueue = await Queue.findOne({
       store: storeId,
       customer: req.user.id,
@@ -57,7 +105,7 @@ exports.joinQueue = async (req, res) => {
     });
     const tokenNumber = `${store.name.substring(0, 3).toUpperCase()}-${todayQueues + 1}`;
 
-    // Calculate estimated wait time
+    // Calculate wait time
     const peopleAhead = store.currentQueueSize;
     const estimatedWaitTime = peopleAhead * store.avgServiceTime;
 
@@ -76,9 +124,23 @@ exports.joinQueue = async (req, res) => {
     store.currentQueueSize += 1;
     await store.save();
 
-    // Populate customer and store details
+    // Get customer and store details
     await queue.populate('customer', 'name phone email');
     await queue.populate('store', 'name address phone');
+
+    // 📡 Send real-time update to everyone
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`store-${storeId}`).emit('customerJoined', {
+        storeId,
+        currentQueueSize: store.currentQueueSize,
+        newCustomer: {
+          tokenNumber: queue.tokenNumber,
+          name: queue.customer.name
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
 
     res.status(201).json({
       success: true,
@@ -93,9 +155,78 @@ exports.joinQueue = async (req, res) => {
   }
 };
 
-// @desc    Get my queue status
-// @route   GET /api/queues/my-queues
-// @access  Private (Customer)
+// 🚪 WITHDRAW FROM QUEUE (NEW FEATURE!)
+exports.withdrawFromQueue = async (req, res) => {
+  try {
+    const queue = await Queue.findById(req.params.id);
+
+    if (!queue) {
+      return res.status(404).json({
+        success: false,
+        message: 'Queue entry not found'
+      });
+    }
+
+    // Check if this is your queue entry
+    if (queue.customer.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to withdraw from this queue'
+      });
+    }
+
+    // Can only withdraw if waiting
+    if (queue.status !== 'waiting') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot withdraw. Current status: ${queue.status}`
+      });
+    }
+
+    // Update queue status to cancelled
+    queue.status = 'cancelled';
+    queue.serviceEndTime = new Date();
+    await queue.save();
+
+    // Decrease store queue size
+    const store = await Store.findById(queue.store);
+    store.currentQueueSize = Math.max(0, store.currentQueueSize - 1);
+    await store.save();
+
+    // Get Socket.IO
+    const io = req.app.get('io');
+
+    // 🔄 Recalculate wait times for everyone still waiting
+    await recalculateWaitTimes(queue.store, io);
+
+    // 📡 Send real-time update
+    if (io) {
+      io.to(`store-${queue.store}`).emit('customerWithdrew', {
+        storeId: queue.store,
+        currentQueueSize: store.currentQueueSize,
+        tokenNumber: queue.tokenNumber,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Successfully withdrew from queue. Wait times updated for others.',
+      data: {
+        queueId: queue._id,
+        tokenNumber: queue.tokenNumber,
+        withdrawTime: queue.serviceEndTime
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// 📋 GET MY QUEUES
 exports.getMyQueues = async (req, res) => {
   try {
     const queues = await Queue.find({
@@ -118,9 +249,7 @@ exports.getMyQueues = async (req, res) => {
   }
 };
 
-// @desc    Get queue by ID
-// @route   GET /api/queues/:id
-// @access  Private
+// 🔍 GET SINGLE QUEUE
 exports.getQueue = async (req, res) => {
   try {
     const queue = await Queue.findById(req.params.id)
@@ -135,9 +264,10 @@ exports.getQueue = async (req, res) => {
     }
 
     // Check authorization
+    const store = await Store.findById(queue.store._id);
     if (
       queue.customer._id.toString() !== req.user.id &&
-      queue.store.owner.toString() !== req.user.id
+      store.owner.toString() !== req.user.id
     ) {
       return res.status(403).json({
         success: false,
@@ -157,9 +287,7 @@ exports.getQueue = async (req, res) => {
   }
 };
 
-// @desc    Get store queue (for store owners)
-// @route   GET /api/queues/store/:storeId
-// @access  Private (Store Owner)
+// 🏪 GET STORE QUEUE (for store owners)
 exports.getStoreQueue = async (req, res) => {
   try {
     const { storeId } = req.params;
@@ -206,9 +334,7 @@ exports.getStoreQueue = async (req, res) => {
   }
 };
 
-// @desc    Update queue status (for store owners)
-// @route   PUT /api/queues/:id/status
-// @access  Private (Store Owner)
+// 🔄 UPDATE QUEUE STATUS (for store owners)
 exports.updateQueueStatus = async (req, res) => {
   try {
     const { status } = req.body;
@@ -233,11 +359,9 @@ exports.updateQueueStatus = async (req, res) => {
     const oldStatus = queue.status;
     queue.status = status;
 
-    // Update timestamps based on status
+    // Update timestamps
     if (status === 'in-service' && !queue.serviceStartTime) {
       queue.serviceStartTime = new Date();
-      
-      // Calculate actual wait time
       const waitTime = Math.floor((queue.serviceStartTime - queue.joinedAt) / 60000);
       queue.actualWaitTime = waitTime;
     }
@@ -247,15 +371,36 @@ exports.updateQueueStatus = async (req, res) => {
         queue.serviceEndTime = new Date();
       }
 
-      // Decrease queue size if moving from waiting/in-service
+      // Decrease queue size
       if (oldStatus === 'waiting' || oldStatus === 'in-service') {
         const store = await Store.findById(queue.store._id);
         store.currentQueueSize = Math.max(0, store.currentQueueSize - 1);
         await store.save();
+
+        // Recalculate wait times
+        const io = req.app.get('io');
+        await recalculateWaitTimes(queue.store._id, io);
       }
     }
 
     await queue.save();
+
+    // 📡 Send real-time update
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`queue-${queue._id}`).emit('statusUpdate', {
+        queueId: queue._id,
+        status: queue.status,
+        timestamp: new Date().toISOString()
+      });
+
+      io.to(`store-${queue.store._id}`).emit('queueStatusUpdate', {
+        queueId: queue._id,
+        tokenNumber: queue.tokenNumber,
+        status: queue.status,
+        timestamp: new Date().toISOString()
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -270,59 +415,12 @@ exports.updateQueueStatus = async (req, res) => {
   }
 };
 
-// @desc    Cancel queue (for customers)
-// @route   DELETE /api/queues/:id
-// @access  Private (Customer)
+// ❌ CANCEL QUEUE (Legacy - redirects to withdraw)
 exports.cancelQueue = async (req, res) => {
-  try {
-    const queue = await Queue.findById(req.params.id);
-
-    if (!queue) {
-      return res.status(404).json({
-        success: false,
-        message: 'Queue entry not found'
-      });
-    }
-
-    // Check if customer owns this queue entry
-    if (queue.customer.toString() !== req.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to cancel this queue'
-      });
-    }
-
-    // Can only cancel if waiting
-    if (queue.status !== 'waiting') {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot cancel queue. Status is not waiting.'
-      });
-    }
-
-    queue.status = 'cancelled';
-    await queue.save();
-
-    // Update store queue size
-    const store = await Store.findById(queue.store);
-    store.currentQueueSize = Math.max(0, store.currentQueueSize - 1);
-    await store.save();
-
-    res.status(200).json({
-      success: true,
-      message: 'Queue cancelled successfully'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
+  return exports.withdrawFromQueue(req, res);
 };
 
-// @desc    Get queue statistics (for store owners)
-// @route   GET /api/queues/store/:storeId/stats
-// @access  Private (Store Owner)
+// 📊 GET QUEUE STATISTICS (for store owners)
 exports.getQueueStats = async (req, res) => {
   try {
     const { storeId } = req.params;
@@ -383,3 +481,5 @@ exports.getQueueStats = async (req, res) => {
     });
   }
 };
+
+module.exports = exports;

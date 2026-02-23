@@ -6,6 +6,7 @@ const {
   getQueue,
   getStoreQueue,
   updateQueueStatus,
+  withdrawFromQueue,
   cancelQueue,
   getQueueStats
 } = require('../controllers/queueController');
@@ -14,6 +15,7 @@ const { protect, authorize } = require('../middleware/auth');
 // Customer routes
 router.post('/join', protect, joinQueue);
 router.get('/my-queues', protect, getMyQueues);
+router.post('/:id/withdraw', protect, withdrawFromQueue);
 router.delete('/:id', protect, cancelQueue);
 
 // General routes
