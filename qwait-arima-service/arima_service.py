@@ -236,7 +236,8 @@ def model_info():
         }), 500
 
 if __name__ == '__main__':
-    print("🚀 ARIMA Forecasting Service Starting...")
-    print("📊 Using pre-trained models")
-    print("🔍 Service running on http://localhost:5000")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.environ.get('PORT', '5000'))
+    print("ARIMA Forecasting Service Starting...")
+    print("Using pre-trained models")
+    print(f"Service running on http://0.0.0.0:{port}")
+    app.run(host='0.0.0.0', port=port, debug=False)

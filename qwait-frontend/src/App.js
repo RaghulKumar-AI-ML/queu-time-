@@ -5,9 +5,9 @@ import io from 'socket.io-client';
 // For localhost: Use 'localhost'
 // For other devices: Replace with your IP (run: python get_network_ip.py)
 // Example: const API_BASE = 'http://192.168.1.5:3000';
-const API_BASE = 'http://localhost:3000';
+const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:3000';
 const API_URL = `${API_BASE}/api`;
-const PEOPLE_COUNTER_URL = 'http://localhost:5001';
+const PEOPLE_COUNTER_URL = process.env.REACT_APP_PEOPLE_COUNTER_URL || 'http://localhost:5001';
 
 
 
