@@ -6,7 +6,7 @@
         "rootDirectory": "qwait-backend"
       },
       "build": {
-        "builder": "NIXPACKS"
+        "builder": "DOCKER"
       },
       "deploy": {
         "startCommand": "npm start"
@@ -17,7 +17,7 @@
         "rootDirectory": "qwait-arima-service"
       },
       "build": {
-        "builder": "NIXPACKS"
+        "builder": "DOCKER"
       },
       "deploy": {
         "startCommand": "gunicorn -b 0.0.0.0:$PORT arima_service:app"
