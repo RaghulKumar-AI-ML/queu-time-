@@ -2,7 +2,9 @@
   "$schema": "https://railway.app/railway.schema.json",
   "services": {
     "backend": {
-      "rootDirectory": "qwait-backend",
+      "source": {
+        "rootDirectory": "qwait-backend"
+      },
       "build": {
         "builder": "NIXPACKS"
       },
@@ -11,7 +13,9 @@
       }
     },
     "arima": {
-      "rootDirectory": "qwait-arima-service",
+      "source": {
+        "rootDirectory": "qwait-arima-service"
+      },
       "build": {
         "builder": "NIXPACKS"
       },
