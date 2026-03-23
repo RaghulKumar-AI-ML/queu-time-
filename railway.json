@@ -1,0 +1,27 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "services": {
+    "backend": {
+      "source": {
+        "rootDirectory": "qwait-backend"
+      },
+      "build": {
+        "builder": "DOCKER"
+      },
+      "deploy": {
+        "startCommand": "npm start"
+      }
+    },
+    "arima": {
+      "source": {
+        "rootDirectory": "qwait-arima-service"
+      },
+      "build": {
+        "builder": "DOCKER"
+      },
+      "deploy": {
+        "startCommand": "gunicorn -b 0.0.0.0:$PORT arima_service:app"
+      }
+    }
+  }
+}
