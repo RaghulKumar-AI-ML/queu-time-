@@ -4,6 +4,8 @@ import pickle
 import numpy as np
 import pandas as pd
 from datetime import datetime
+import subprocess
+import os
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -53,13 +55,38 @@ class PreTrainedForecaster:
         category = store_data.get('category', 'retail')
         return category_mapping.get(category, 'retail')
     
-    def forecast_wait_time(self, store_data, current_queue_size, avg_service_time):
+    def _compute_confidence_interval(self, estimate, historical_data):
+        """Compute a variable confidence interval based on data volume/variance."""
+        if estimate is None:
+            estimate = 0
+        waits = []
+        if historical_data:
+            for point in historical_data:
+                try:
+                    waits.append(float(point.get('waitTime', 0)))
+                except Exception:
+                    continue
+
+        if len(waits) < 3:
+            rel_width = 0.5  # low confidence when data is sparse
+        else:
+            mean = float(np.mean(waits)) if np.mean(waits) > 0 else 1.0
+            std = float(np.std(waits))
+            cv = std / mean if mean > 0 else 0.5
+            rel_width = 0.2 + min(0.6, (cv * 0.4) + (1.0 / np.sqrt(len(waits))) * 0.4)
+            rel_width = max(0.15, min(rel_width, 0.8))
+
+        lower = max(0, estimate * (1 - rel_width))
+        upper = estimate * (1 + rel_width)
+        return round(lower, 2), round(upper, 2)
+
+    def forecast_wait_time(self, store_data, current_queue_size, avg_service_time, historical_data=None):
         """Forecast wait time using pre-trained model"""
         try:
             store_type = self.get_store_category(store_data)
             
             if store_type not in self.models:
-                return self.fallback_forecast(current_queue_size, avg_service_time)
+                return self.fallback_forecast(current_queue_size, avg_service_time, historical_data)
             
             model_info = self.models[store_type]
             model = model_info['model']
@@ -76,16 +103,18 @@ class PreTrainedForecaster:
             else:
                 final_forecast = arima_forecast
             
-            confidence_lower = final_forecast * 0.8
-            confidence_upper = final_forecast * 1.2
+            confidence_lower, confidence_upper = self._compute_confidence_interval(
+                final_forecast,
+                historical_data
+            )
             
             return {
                 'forecasted_wait_time': round(final_forecast, 2),
                 'arima_forecast': round(arima_forecast, 2),
                 'queue_based': queue_based,
                 'confidence_interval': {
-                    'lower': round(confidence_lower, 2),
-                    'upper': round(confidence_upper, 2)
+                    'lower': confidence_lower,
+                    'upper': confidence_upper
                 },
                 'method': 'pretrained_arima',
                 'model_type': store_type,
@@ -94,19 +123,23 @@ class PreTrainedForecaster:
             
         except Exception as e:
             print(f"Forecast error: {e}")
-            return self.fallback_forecast(current_queue_size, avg_service_time)
+            return self.fallback_forecast(current_queue_size, avg_service_time, historical_data)
     
-    def fallback_forecast(self, current_queue_size, avg_service_time):
+    def fallback_forecast(self, current_queue_size, avg_service_time, historical_data=None):
         """Simple fallback calculation"""
         estimated_wait = current_queue_size * avg_service_time
+        confidence_lower, confidence_upper = self._compute_confidence_interval(
+            estimated_wait,
+            historical_data
+        )
         
         return {
             'forecasted_wait_time': estimated_wait,
             'arima_forecast': estimated_wait,
             'queue_based': estimated_wait,
             'confidence_interval': {
-                'lower': estimated_wait * 0.8,
-                'upper': estimated_wait * 1.2
+                'lower': confidence_lower,
+                'upper': confidence_upper
             },
             'method': 'fallback_simple'
         }
@@ -139,11 +172,13 @@ def forecast():
         store_data = data.get('storeData', {})
         current_queue_size = data.get('currentQueueSize', 0)
         avg_service_time = data.get('avgServiceTime', 15)
+        historical_data = data.get('historicalData', [])
         
         forecast_result = forecaster.forecast_wait_time(
             store_data,
             current_queue_size,
-            avg_service_time
+            avg_service_time,
+            historical_data
         )
         
         return jsonify({
@@ -159,6 +194,41 @@ def forecast():
             }
         })
         
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+@app.route('/retrain', methods=['POST'])
+def retrain():
+    try:
+        subprocess.Popen(['python', 'train_arima_model.py'], cwd=os.path.dirname(__file__))
+        return jsonify({
+            'success': True,
+            'message': 'Retrain started'
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+@app.route('/model-info', methods=['GET'])
+def model_info():
+    try:
+        metadata_path = os.path.join(os.path.dirname(__file__), 'model_metadata.json')
+        if not os.path.exists(metadata_path):
+            return jsonify({
+                'success': False,
+                'message': 'model_metadata.json not found'
+            }), 404
+        with open(metadata_path, 'r') as f:
+            metadata = f.read()
+        return jsonify({
+            'success': True,
+            'data': metadata
+        })
     except Exception as e:
         return jsonify({
             'success': False,

@@ -73,6 +73,25 @@ const storeSchema = new mongoose.Schema({
     type: Number,
     default: 50
   },
+  autoThrottleEnabled: {
+    type: Boolean,
+    default: true
+  },
+  autoThrottleLimit: {
+    type: Number,
+    default: 0
+  },
+  priorityRules: [{
+    type: String
+  }],
+  counters: {
+    type: Number,
+    default: 1
+  },
+  activeCounters: {
+    type: Number,
+    default: 1
+  },
   currentQueueSize: {
     type: Number,
     default: 0

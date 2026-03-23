@@ -6,7 +6,9 @@ const {
   getStore,
   updateStore,
   deleteStore,
-  getMyStores
+  getMyStores,
+  getAllStoresAdmin,
+  updateStoreAdmin
 } = require('../controllers/storeController');
 const { protect, authorize } = require('../middleware/auth');
 
@@ -19,5 +21,9 @@ router.post('/', protect, authorize('store_owner'), createStore);
 router.put('/:id', protect, authorize('store_owner'), updateStore);
 router.delete('/:id', protect, authorize('store_owner'), deleteStore);
 router.get('/my/stores', protect, authorize('store_owner'), getMyStores);
+
+// Admin routes
+router.get('/admin/all', protect, authorize('admin'), getAllStoresAdmin);
+router.put('/admin/:id', protect, authorize('admin'), updateStoreAdmin);
 
 module.exports = router;

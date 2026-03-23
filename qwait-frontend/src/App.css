@@ -36,3 +36,26 @@
     transform: rotate(360deg);
   }
 }
+
+.queue-move {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  border-radius: 6px;
+  font-size: 13px;
+  animation: queue-move-pop 0.6s ease;
+  display: inline-block;
+}
+
+@keyframes queue-move-pop {
+  0% {
+    transform: translateY(4px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

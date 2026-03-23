@@ -2,21 +2,21 @@
 # Generated automatically
 
 # Your Local IP Address
-LOCAL_IP=192.168.1.11
+LOCAL_IP=10.239.79.161
 
 # Frontend URLs (Update in qwait-frontend/src/App.js)
-API_URL=http://192.168.1.11:3000/api
-PEOPLE_COUNTER_URL=http://192.168.1.11:5001
+API_URL=http://10.239.79.161:3000/api
+PEOPLE_COUNTER_URL=http://10.239.79.161:5001
 
 # Backend URLs (Already correct if using 0.0.0.0)
 BACKEND_HOST=0.0.0.0
 BACKEND_PORT=3000
 
 # Access URLs
-FRONTEND_URL=http://192.168.1.11:3001
-BACKEND_API=http://192.168.1.11:3000
-ARIMA_SERVICE=http://192.168.1.11:5000
-PEOPLE_COUNTER=http://192.168.1.11:5001
+FRONTEND_URL=http://10.239.79.161:3001
+BACKEND_API=http://10.239.79.161:3000
+ARIMA_SERVICE=http://10.239.79.161:5000
+PEOPLE_COUNTER=http://10.239.79.161:5001
 
 # Remember:
 # - All devices must be on the SAME WiFi

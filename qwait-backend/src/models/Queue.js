@@ -17,27 +17,45 @@ const queueSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['waiting', 'in-service', 'completed', 'cancelled', 'no-show'],
+    enum: ['scheduled', 'waiting', 'in-service', 'completed', 'cancelled', 'no-show'],
     default: 'waiting'
   },
   priority: {
     type: String,
-    enum: ['normal', 'high', 'urgent'],
     default: 'normal'
-  },
-  serviceType: {
-    type: String
   },
   joinedAt: {
     type: Date,
     default: Date.now
   },
+  scheduledStart: {
+    type: Date
+  },
+  scheduledEnd: {
+    type: Date
+  },
   estimatedWaitTime: {
     type: Number, // in minutes
     required: true
   },
+  estimatedServiceTime: {
+    type: Number // in minutes
+  },
   actualWaitTime: {
     type: Number // in minutes
+  },
+  actualServiceTime: {
+    type: Number // in minutes
+  },
+  forecastError: {
+    type: Number // actual - estimated
+  },
+  waitTimeUpdatedAt: {
+    type: Date,
+    default: Date.now
+  },
+  checkedInAt: {
+    type: Date
   },
   serviceStartTime: {
     type: Date

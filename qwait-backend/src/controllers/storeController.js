@@ -15,7 +15,10 @@ exports.createStore = async (req, res) => {
       operatingHours,
       services,
       avgServiceTime,
-      maxQueueSize
+      maxQueueSize,
+      autoThrottleEnabled,
+      autoThrottleLimit,
+      priorityRules
     } = req.body;
 
     // Check if user is store owner
@@ -38,7 +41,10 @@ exports.createStore = async (req, res) => {
       operatingHours,
       services,
       avgServiceTime,
-      maxQueueSize
+      maxQueueSize,
+      autoThrottleEnabled,
+      autoThrottleLimit,
+      priorityRules
     });
 
     res.status(201).json({
@@ -84,6 +90,58 @@ exports.getAllStores = async (req, res) => {
       success: true,
       count: stores.length,
       data: { stores }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// @desc    Get all stores (admin)
+// @route   GET /api/stores/admin/all
+// @access  Private (Admin)
+exports.getAllStoresAdmin = async (req, res) => {
+  try {
+    const stores = await Store.find({})
+      .populate('owner', 'name email phone')
+      .sort('-createdAt');
+
+    res.status(200).json({
+      success: true,
+      count: stores.length,
+      data: { stores }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// @desc    Update store (admin)
+// @route   PUT /api/stores/admin/:id
+// @access  Private (Admin)
+exports.updateStoreAdmin = async (req, res) => {
+  try {
+    const store = await Store.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true
+    });
+
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        message: 'Store not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Store updated successfully',
+      data: { store }
     });
   } catch (error) {
     res.status(500).json({

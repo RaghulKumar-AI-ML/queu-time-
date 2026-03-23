@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const http = require('http');
 const socketIO = require('socket.io');
 const connectDatabase = require('./config/database');
+const { processScheduledQueues, processNoShows, getNoShowEnabled } = require('./controllers/queueController');
 
 // Import routes
 const storeRoutes = require('./routes/storeRoutes');
@@ -38,6 +39,23 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Background scheduler for scheduled queues and no-shows
+let schedulerRunning = false;
+setInterval(async () => {
+  if (schedulerRunning) return;
+  schedulerRunning = true;
+  try {
+    await processScheduledQueues(io);
+    if (getNoShowEnabled()) {
+      await processNoShows(io);
+    }
+  } catch (error) {
+    console.error('Scheduler error:', error);
+  } finally {
+    schedulerRunning = false;
+  }
+}, 60 * 1000);
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
