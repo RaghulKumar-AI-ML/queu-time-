@@ -10,16 +10,6 @@
         "startCommand": "npm start"
       }
     },
-    "frontend": {
-      "rootDirectory": "qwait-frontend",
-      "build": {
-        "builder": "NIXPACKS",
-        "buildCommand": "npm install && npm run build"
-      },
-      "deploy": {
-        "startCommand": "npx serve -s build -l $PORT"
-      }
-    },
     "arima": {
       "rootDirectory": "qwait-arima-service",
       "build": {
